@@ -1,22 +1,17 @@
 import RPi.GPIO as GPIO
 import time
 
-# Pin Definitions:
-servoPin = 18  # GPIO14 (physical pin 8)
-
-dc = 10  # duty cycle (0-100) for PWM pin
-
-# Pin Setup:
+servoPin = 14  # GPIO14 (physical pin 8)
+#0º(1ms) -> dc=5, 90º(1.5ms)->dc=7.5, 180º(2ms)->dc=10
+#rule: ((angle*1.5)/90)
+#dc = (float(1)/((1/50)*1000))*100
 GPIO.setmode(GPIO.BCM)  # Broadcom pin-numbering scheme
 GPIO.setup(servoPin, GPIO.OUT)  # PWM pin set as output
-#servo = AngularServo(14, min_angle=90, max_angle=-90)
-#servo = Servo(14)
-servo = GPIO.PWM(servoPin, 50) 
-servo.start(0.1)
-time.sleep(2)
-servo.ChangeDutyCycle(90)
-time.sleep(10)
-servo.ChangeDutyCycle(0)
+servo = GPIO.PWM(servoPin, 50)   # Initialize PWM on pwmPin 50Hz frequency
 
-servo.stop()
-GPIO.cleanup()
+servo.start(0)
+
+if __name__ == '__main__':
+    servo.ChangeDutyCycle((0.5/20)*100)
+    time.sleep(2)
+    GPIO.cleanup()
