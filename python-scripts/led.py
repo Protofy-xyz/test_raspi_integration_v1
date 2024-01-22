@@ -1,6 +1,7 @@
 import RPi.GPIO as GPIO
 import time
 import paho.mqtt.client as mqtt_client
+import threading
 
 # Pin Definitions:
 servoPin = 14  # GPIO14 (physical pin 8)
@@ -21,6 +22,7 @@ green_led_pwm = GPIO.PWM(greenLedPin, 100)
 yellow_led_pwm = GPIO.PWM(yellowLedPin, 100)
 servo = GPIO.PWM(servoPin, 50)   # Initialize PWM on pwmPin 50Hz frequency
 
+servo_value = 0
 mqtt_connected = False
 servo.start(0)
 
@@ -28,8 +30,8 @@ def on_connect(client, userdata, flags, rc):
     global mqtt_connected
     if rc == 0:
         print("Connected to MQTT Broker!")
-        client.subscribe("Motor/move_clockwise")
-        client.subscribe("Motor/move_anticlockwise")
+        #client.subscribe("Motor/move_clockwise")
+        client.subscribe("motor")
         mqtt_connected = True
     else:
         print(f"Failed to connect, return code {rc}")
@@ -41,8 +43,8 @@ def on_message(client, userdata, msg):
     if msg:
         recieved_value = float(payload)
         print("recieved value: ", recieved_value)
-        move_servo(recieved_value)
-        update_leds(msg.topic)
+        #move_servo(recieved_value)
+        servo_leds(recieved_value)
 
 def connect_mqtt():
     client = mqtt_client.Client()
@@ -51,23 +53,42 @@ def connect_mqtt():
     client.connect('192.168.0.28', 1883, 60) #'192.168.86.45'
     return client
 
-def update_leds(topic):
-    if topic == 'Motor/move_clockwise':
-        turn_on_leds([redLedPin, yellowLedPin, greenLedPin])
-    elif topic == 'Motor/move_anticlockwise':
-        turn_on_leds([greenLedPin, yellowLedPin, redLedPin])
+def servo_leds(value):
+    global servo_value
 
-def turn_on_leds(led_order):
-    for led_pin in led_order:
-        GPIO.output(led_pin, 1)
-        time.sleep(1)
-        GPIO.output(led_pin, 0)
+    def move_servo_thread(pos):
+        ms = ((2/180)*pos) + 0.5
+        dc = (ms/20)*100
+        servo.ChangeDutyCycle(dc)
+        time.sleep(4)
 
-def move_servo(pos):
-    ms = ((2/180)*pos) + 0.5
-    dc = (ms/20)*100
-    servo.ChangeDutyCycle(dc)
-    time.sleep(4)
+    def activate_leds_thread(led_order):
+        for led_pin in led_order:
+            GPIO.output(led_pin, 1)
+            time.sleep(1)
+            GPIO.output(led_pin, 0)
+
+    if value > servo_value:
+        led_order = [redLedPin, yellowLedPin, greenLedPin]
+        print("heading to 180")
+    elif value <= servo_value:
+        led_order = [greenLedPin, yellowLedPin, redLedPin]
+        print("heading to 0")
+
+    # Create threads for moving servo and activating LEDs
+    servo_thread = threading.Thread(target=move_servo_thread, args=(value,))
+    leds_thread = threading.Thread(target=activate_leds_thread, args=(led_order,))
+
+    # Start both threads
+    leds_thread.start()
+    servo_thread.start()
+
+    # Wait for both threads to finish
+    leds_thread.join()
+    servo_thread.join()
+
+    servo_value = value
+
 
 if __name__ == '__main__':
 	while not mqtt_connected:
